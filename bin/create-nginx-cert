@@ -1,0 +1,91 @@
+#!/bin/bash
+
+# Check if a domain name argument is provided
+if [ "$#" -ne 1 ]; then
+    echo "Usage: $0 <domain-name>"
+    exit 1
+fi
+
+# Use the provided domain name
+DOMAIN=$1
+CERT_DIR="/etc/ssl/certs"
+CERT_PATH="$CERT_DIR/$DOMAIN.crt"
+KEY_PATH="$CERT_DIR/$DOMAIN.key"
+PEM_LINK_PATH="$CERT_DIR/$DOMAIN.pem" # Path to the symlink for the PEM file
+NGINX_CONF_DIR="/etc/nginx/sites-available"
+NGINX_CONF="$NGINX_CONF_DIR/$DOMAIN"
+
+# Remove existing certificate, key, and PEM files if they exist
+[ -f "$CERT_PATH" ] && sudo rm "$CERT_PATH"
+[ -f "$KEY_PATH" ] && sudo rm "$KEY_PATH"
+
+# Remove the PEM symlink and the actual file it points to
+if [ -L "$PEM_LINK_PATH" ]; then
+    REAL_PEM_PATH=$(readlink "$PEM_LINK_PATH") # Get the actual file path
+    sudo rm "$PEM_LINK_PATH"
+    [ -f "$REAL_PEM_PATH" ] && sudo rm "$REAL_PEM_PATH"
+fi
+
+# Create a new self-signed certificate and key
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout "$KEY_PATH" \
+    -out "$CERT_PATH" \
+    -subj "/C=US/ST=State/L=City/O=Organization/CN=$DOMAIN"
+
+# Trust the certificate (add to trusted certificates)
+sudo trust anchor "$CERT_PATH"
+
+# Create NGINX configuration with HTTP to HTTPS redirection
+sudo bash -c "cat > $NGINX_CONF" <<EOF
+  server { 
+    listen 80; 
+    listen [::]:80; 
+    return 301 https://$DOMAIN; 
+} 
+ 
+server { 
+    listen 443 ssl http2; 
+    listen [::]:443 ssl http2; 
+    # Domain name 
+    server_name $DOMAIN; 
+ 
+    ssl_certificate $CERT_PATH; 
+    ssl_certificate_key $KEY_PATH; 
+ 
+    # Root directory for the website 
+    root /home/mihai/projects/$DOMAIN; 
+ 
+    # Index file 
+    index index.php index.html index.htm; 
+ 
+    # Log files for debugging 
+    access_log /var/log/nginx/$DOMAIN.access.log; 
+    error_log /var/log/nginx/$DOMAIN.error.log; 
+ 
+    # Handling PHP files 
+    location ~ \.php$ { 
+        fastcgi_pass 127.0.0.1:9000; 
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name; 
+        include fastcgi_params;
+    } 
+ 
+    # Static files 
+    location / { 
+        try_files \$uri \$uri/ /index.php?\$query_string; 
+    } 
+ 
+    # Deny access to .htaccess files 
+    location ~ /\.ht { 
+        deny all; 
+    } 
+ 
+    # Additional configurations can go here 
+}
+
+
+EOF
+
+# Restart NGINX to apply changes
+sudo systemctl restart nginx
+
+echo "SSL certificate created and NGINX configured for domain $DOMAIN."

@@ -1,0 +1,49 @@
+#!/bin/bash
+
+# Function to list tools
+list_tools() {
+    echo "Available tools in ./bin:"
+    ls ./bin
+}
+
+# Function to copy tools
+copy_tools() {
+    if [ "$#" -eq 0 ]; then
+        # Copy all tools if no argument is provided
+        sudo cp ./bin/* /usr/local/bin/
+        echo "All tools have been copied to /usr/local/bin."
+    else
+        # Copy each specified tool
+        for tool in "$@"; do
+            if sudo cp "./bin/$tool" /usr/local/bin/; then
+                echo "Tool '$tool' has been copied to /usr/local/bin."
+            else
+                echo "Error: Tool '$tool' could not be found or copied."
+            fi
+        done
+    fi
+}
+
+# Help function
+show_help() {
+    echo "Usage: $0 [tool_name]..."
+    echo "Options:"
+    echo "  tool_name    Name of the tool to install. If omitted, all tools will be installed."
+    echo "               Multiple tool names can be provided to install specific tools."
+    echo "  -l, --list   List all available tools."
+    echo "  -h, --help   Show this help message."
+}
+
+# Main script logic
+case "$1" in
+    -l|--list)
+        list_tools
+        ;;
+    -h|--help)
+        show_help
+        ;;
+    *)
+        copy_tools "$@"
+        ;;
+esac
+

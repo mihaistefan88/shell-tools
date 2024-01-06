@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Check if a site name is provided
+if [ "$#" -ne 1 ]; then
+    echo "Usage: $0 <site-name>"
+    exit 1
+fi
+
+SITENAME=$1
+AVAILABLE="/etc/nginx/sites-available/$SITENAME"
+ENABLED="/etc/nginx/sites-enabled/$SITENAME"
+
+# Check if the site configuration exists
+if [ ! -f "$AVAILABLE" ]; then
+    echo "Site configuration does not exist: $AVAILABLE"
+    exit 1
+fi
+
+# Enable the site
+sudo ln -s "$AVAILABLE" "$ENABLED"
+echo "Site enabled: $SITENAME"
+
+# Reload NGINX
+sudo systemctl reload nginx
+
